@@ -1,40 +1,353 @@
 // src/ui/main.slint
-import { Button } from "std-widgets.slint";
+import { Button, Palette } from "std-widgets.slint";
 
 export component MainWindow inherits Window {
+  // Public API
   in-out property <string> status: "Ready";
 
-  callback power();
-  callback speed_1();
-  callback speed_2();
-  callback speed_3();
-  callback speed_4();
-  callback speed_5();
-  callback boost();
+    callback power();
+    callback speed_1();
+    callback speed_2();
+    callback speed_3();
+    callback speed_4();
+    callback speed_5();
+    callback boost();
 
-  VerticalLayout {
-    spacing: 12px;
+    // Extra actions
+  callback sleep();
+    callback led();
+    callback timer_1h();
+    callback timer_2h();
+    callback timer_4h();
 
-    Text {
-      text: "Atomberg Remote";
-      font-size: 20px;
-    }
+    // Profile-driven visibility (set from Rust)
+  in-out property <bool> show_sleep: true;
+    in-out property <bool> show_led: false;
+    in-out property <bool> show_timer_1h: true;
+    in-out property <bool> show_timer_2h: true;
+    in-out property <bool> show_timer_4h: true;
 
-    Text { text: status; }
+    title: "Atomberg Remote";
+    min-width: 320px;
+    min-height: 230px;
 
+    // Simple breakpoints
+  private property <bool> wide: root.width >= 600px;
+
+    // Colors
+  private property <color> surface: #121212;
+    private property <color> panel: #1b1b1b;
+    private property <color> border: #2a2a2a;
+    private property <color> text: #e6e6e6;
+    private property <color> subtext: #9ea2a8;
+
+    background: surface;
+
+    VerticalLayout {
+        padding: 12px;
+        spacing: 10px;
+
+        // Header with inline status
     HorizontalLayout {
-      spacing: 8px;
-      Button { text: "Power"; clicked => { root.power(); } }
-      Button { text: "Boost"; clicked => { root.boost(); } }
-    }
+            spacing: 8px;
+            alignment: space-between;
 
+            Text {
+                text: "Atomberg Remote";
+                color: text;
+                font-size: 18px;
+                font-weight: 700;
+                vertical-alignment: center;
+            }
+
+            Rectangle {
+                border-radius: 8px;
+                background: panel;
+                HorizontalLayout {
+                    padding-left: 10px;
+                    padding-right: 10px;
+                    spacing: 8px;
+                    alignment: center;
+
+                    Rectangle {
+                        width: 8px;
+                        height: 8px;
+                        border-radius: 4px;
+                        background: Palette.accent-background;
+                    }
+
+                    Text {
+                        text: root.status;
+                        color: subtext;
+                        font-size: 12px;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+        }
+
+        Rectangle {
+            height: 1px;
+            background: border;
+        }
+
+        // Centered control panel
     HorizontalLayout {
-      spacing: 8px;
-      Button { text: "Speed 1"; clicked => { root.speed_1(); } }
-      Button { text: "Speed 2"; clicked => { root.speed_2(); } }
-      Button { text: "Speed 3"; clicked => { root.speed_3(); } }
-      Button { text: "Speed 4"; clicked => { root.speed_4(); } }
-      Button { text: "Speed 5"; clicked => { root.speed_5(); } }
+            alignment: center;
+
+            Rectangle {
+                width: min(parent.width, wide ? 640px : 560px);
+                border-radius: 12px;
+                background: panel;
+                drop-shadow-blur: 6px;
+                drop-shadow-color: #00000066;
+
+                VerticalLayout {
+                    padding: 12px;
+                    spacing: 12px;
+
+                    // Power + Boost
+          HorizontalLayout {
+                        spacing: 8px;
+
+                        Button {
+                            text: "⏻ Power";
+                            height: 52px;
+                            preferred-width: 0px;
+                            horizontal-stretch: 1;
+                            clicked => {
+                                root.status = "Power toggled";
+                                root.power();
+                            }
+                        }
+
+                        Button {
+                            text: "⚡ Boost";
+                            height: 52px;
+                            preferred-width: 0px;
+                            horizontal-stretch: 1;
+                            clicked => {
+                                root.status = "Boost mode";
+                                root.boost();
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        height: 1px;
+                        background: border;
+                    }
+
+                    // Speeds
+          if wide: HorizontalLayout {
+                        spacing: 8px;
+                        Button {
+                            text: "1";
+                            height: 48px;
+                            preferred-width: 0px;
+                            horizontal-stretch: 1;
+                            clicked => {
+                                root.status = "Speed 1";
+                                root.speed_1();
+                            }
+                        }
+
+                        Button {
+                            text: "2";
+                            height: 48px;
+                            preferred-width: 0px;
+                            horizontal-stretch: 1;
+                            clicked => {
+                                root.status = "Speed 2";
+                                root.speed_2();
+                            }
+                        }
+
+                        Button {
+                            text: "3";
+                            height: 48px;
+                            preferred-width: 0px;
+                            horizontal-stretch: 1;
+                            clicked => {
+                                root.status = "Speed 3";
+                                root.speed_3();
+                            }
+                        }
+
+                        Button {
+                            text: "4";
+                            height: 48px;
+                            preferred-width: 0px;
+                            horizontal-stretch: 1;
+                            clicked => {
+                                root.status = "Speed 4";
+                                root.speed_4();
+                            }
+                        }
+
+                        Button {
+                            text: "5";
+                            height: 48px;
+                            preferred-width: 0px;
+                            horizontal-stretch: 1;
+                            clicked => {
+                                root.status = "Speed 5";
+                                root.speed_5();
+                            }
+                        }
+                    }
+
+                    if !wide: VerticalLayout {
+                        spacing: 8px;
+                        HorizontalLayout {
+                            spacing: 8px;
+                            Button {
+                                text: "1";
+                                height: 48px;
+                                preferred-width: 0px;
+                                horizontal-stretch: 1;
+                                clicked => {
+                                    root.status = "Speed 1";
+                                    root.speed_1();
+                                }
+                            }
+
+                            Button {
+                                text: "2";
+                                height: 48px;
+                                preferred-width: 0px;
+                                horizontal-stretch: 1;
+                                clicked => {
+                                    root.status = "Speed 2";
+                                    root.speed_2();
+                                }
+                            }
+
+                            Button {
+                                text: "3";
+                                height: 48px;
+                                preferred-width: 0px;
+                                horizontal-stretch: 1;
+                                clicked => {
+                                    root.status = "Speed 3";
+                                    root.speed_3();
+                                }
+                            }
+                        }
+
+                        HorizontalLayout {
+                            spacing: 8px;
+                            Button {
+                                text: "4";
+                                height: 48px;
+                                preferred-width: 0px;
+                                horizontal-stretch: 1;
+                                clicked => {
+                                    root.status = "Speed 4";
+                                    root.speed_4();
+                                }
+                            }
+
+                            Button {
+                                text: "5";
+                                height: 48px;
+                                preferred-width: 0px;
+                                horizontal-stretch: 1;
+                                clicked => {
+                                    root.status = "Speed 5";
+                                    root.speed_5();
+                                }
+                            }
+
+                            Rectangle {
+                                preferred-width: 0px;
+                                horizontal-stretch: 1;
+                                background: Colors.transparent;
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        height: 1px;
+                        background: border;
+                    }
+
+                    // Extras: Sleep / LED / Timers (conditionally shown)
+          VerticalLayout {
+                        spacing: 8px;
+
+                        // Row A: Sleep / LED / Timer 1h
+            HorizontalLayout {
+                            spacing: 8px;
+                            if show_sleep: Button {
+                                text: "Sleep";
+                                height: 48px;
+                                preferred-width: 0px;
+                                horizontal-stretch: 1;
+                                clicked => {
+                                    root.sleep();
+                                }
+                            }
+                            if show_led: Button {
+                                text: "LED";
+                                height: 48px;
+                                preferred-width: 0px;
+                                horizontal-stretch: 1;
+                                clicked => {
+                                    root.led();
+                                }
+                            }
+                            if show_timer_1h: Button {
+                                text: "Timer 1h";
+                                height: 48px;
+                                preferred-width: 0px;
+                                horizontal-stretch: 1;
+                                clicked => {
+                                    root.timer_1h();
+                                }
+                            }
+                        }
+
+                        // Row B: Timer 2h / Timer 4h (spacer if one missing)
+            HorizontalLayout {
+                            spacing: 8px;
+                            if show_timer_2h: Button {
+                                text: "Timer 2h";
+                                height: 48px;
+                                preferred-width: 0px;
+                                horizontal-stretch: 1;
+                                clicked => {
+                                    root.timer_2h();
+                                }
+                            }
+                            if show_timer_4h: Button {
+                                text: "Timer 4h";
+                                height: 48px;
+                                preferred-width: 0px;
+                                horizontal-stretch: 1;
+                                clicked => {
+                                    root.timer_4h();
+                                }
+                            }
+                            Rectangle {
+                                preferred-width: 0px;
+                                horizontal-stretch: 1;
+                                background: Colors.transparent;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Footer
+    HorizontalLayout {
+            alignment: center;
+            Text {
+                text: "Actions are stateless; fan decides final state.";
+                color: subtext;
+                font-size: 12px;
+            }
+        }
     }
-  }
 }
