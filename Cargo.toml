@@ -1,0 +1,40 @@
+[package]
+name = "atomberg-remote"
+version = "0.1.0"
+edition = "2021"
+build = "build.rs"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+slint = { version = "1.13", default-features = false, features = [
+    "backend-android-activity-06",
+    "renderer-femtovg",
+    "compat-1-2",
+] }
+jni = "0.21"
+ndk-context = "0.1"
+log = "0.4"
+android_logger = "0.13"
+slint-build = "1.13"
+
+[build-dependencies]
+slint-build = "1.13"
+
+[package.metadata.android]
+package = "dev.mlm.atombergremote"
+apk_name = "AtombergRemote"
+label = "Atomberg Remote"
+build_targets = ["aarch64-linux-android"]
+
+[package.metadata.android.sdk]
+min_sdk_version = 26
+target_sdk_version = 36
+
+[[package.metadata.android.uses_feature]]
+name = "android.hardware.consumerir"
+required = true
+
+[[package.metadata.android.uses_permission]]
+name = "android.permission.TRANSMIT_IR"

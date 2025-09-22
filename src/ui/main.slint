@@ -1,0 +1,40 @@
+// src/ui/main.slint
+import { Button } from "std-widgets.slint";
+
+export component MainWindow inherits Window {
+  in-out property <string> status: "Ready";
+
+  callback power();
+  callback speed_1();
+  callback speed_2();
+  callback speed_3();
+  callback speed_4();
+  callback speed_5();
+  callback boost();
+
+  VerticalLayout {
+    spacing: 12px;
+
+    Text {
+      text: "Atomberg Remote";
+      font-size: 20px;
+    }
+
+    Text { text: status; }
+
+    HorizontalLayout {
+      spacing: 8px;
+      Button { text: "Power"; clicked => { root.power(); } }
+      Button { text: "Boost"; clicked => { root.boost(); } }
+    }
+
+    HorizontalLayout {
+      spacing: 8px;
+      Button { text: "Speed 1"; clicked => { root.speed_1(); } }
+      Button { text: "Speed 2"; clicked => { root.speed_2(); } }
+      Button { text: "Speed 3"; clicked => { root.speed_3(); } }
+      Button { text: "Speed 4"; clicked => { root.speed_4(); } }
+      Button { text: "Speed 5"; clicked => { root.speed_5(); } }
+    }
+  }
+}
