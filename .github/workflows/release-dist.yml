@@ -17,11 +17,10 @@ env:
   CARGO_TERM_COLOR: always
   RUST_TOOLCHAIN: stable
   APP_SLUG: atomberg-remote
-
-  ANDROID_API: '36'
-  ANDROID_BUILD_TOOLS: '36.0.0'
-  ANDROID_NDK_VERSION: '27.0.12077973'
-  ANDROID_TARGETS: 'aarch64-linux-android armv7-linux-androideabi x86_64-linux-android i686-linux-android'
+  ANDROID_API: "36"
+  ANDROID_BUILD_TOOLS: "36.0.0"
+  ANDROID_NDK_VERSION: "27.0.12077973"
+  ANDROID_TARGETS: "aarch64-linux-android armv7-linux-androideabi x86_64-linux-android i686-linux-android"
 
 jobs:
   dist:
@@ -29,29 +28,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
-
       - name: Cache
         uses: Swatinem/rust-cache@v2
-
       - name: Install cargo-dist
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-dist
-
       - name: Plan
         run: cargo dist plan --tag ${{ github.ref_name }} --output-format=json > dist-manifest.json
-
       - name: Build
         run: cargo dist build --tag ${{ github.ref_name }}
-
       - name: Upload built artifacts
         run: cargo dist upload --tag ${{ github.ref_name }}
-
       - name: Create/Update GitHub Release (notes, checksums)
         run: cargo dist announce --tag ${{ github.ref_name }} --github-token "${{ secrets.GITHUB_TOKEN }}"
 
@@ -59,6 +51,13 @@ jobs:
     name: Android APKs (all ABIs)
     runs-on: ubuntu-latest
     needs: dist
+    # map secrets into env so step if: checks use env.*
+    env:
+      ANDROID_KEYSTORE_ASC: ${{ secrets.ANDROID_KEYSTORE_ASC }}
+      ANDROID_KEYSTORE_PASSPHRASE: ${{ secrets.ANDROID_KEYSTORE_PASSPHRASE }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
 
@@ -116,19 +115,19 @@ jobs:
           done
 
       - name: Decode and decrypt keystore (.asc)
-        if: ${{ secrets.ANDROID_KEYSTORE_ASC && secrets.ANDROID_KEYSTORE_PASSPHRASE && secrets.ANDROID_KEY_ALIAS && secrets.ANDROID_KEYSTORE_PASSWORD && secrets.ANDROID_KEY_PASSWORD }}
+        if: ${{ env.ANDROID_KEYSTORE_ASC != '' && env.ANDROID_KEYSTORE_PASSPHRASE != '' && env.ANDROID_KEY_ALIAS != '' && env.ANDROID_KEYSTORE_PASSWORD != '' && env.ANDROID_KEY_PASSWORD != '' }}
         shell: bash
         run: |
           set -euo pipefail
-          echo "${{ secrets.ANDROID_KEYSTORE_ASC }}" > release.keystore.asc
-          gpg --batch --yes --pinentry-mode loopback --passphrase "${{ secrets.ANDROID_KEYSTORE_PASSPHRASE }}" -o release.keystore -d release.keystore.asc
+          echo "${{ env.ANDROID_KEYSTORE_ASC }}" > release.keystore.asc
+          gpg --batch --yes --pinentry-mode loopback --passphrase "${{ env.ANDROID_KEYSTORE_PASSPHRASE }}" -o release.keystore -d release.keystore.asc
 
       - name: Sign APKs
-        if: ${{ secrets.ANDROID_KEYSTORE_ASC && secrets.ANDROID_KEYSTORE_PASSPHRASE && secrets.ANDROID_KEY_ALIAS && secrets.ANDROID_KEYSTORE_PASSWORD && secrets.ANDROID_KEY_PASSWORD }}
+        if: ${{ env.ANDROID_KEYSTORE_ASC != '' && env.ANDROID_KEYSTORE_PASSPHRASE != '' && env.ANDROID_KEY_ALIAS != '' && env.ANDROID_KEYSTORE_PASSWORD != '' && env.ANDROID_KEY_PASSWORD != '' }}
         env:
-          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          KEY_ALIAS: ${{ env.ANDROID_KEY_ALIAS }}
+          KS_PASS: ${{ env.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_PASS: ${{ env.ANDROID_KEY_PASSWORD }}
           BUILD_TOOLS: ${{ env.ANDROID_BUILD_TOOLS }}
         run: |
           set -euo pipefail
