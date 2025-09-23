@@ -1,0 +1,2 @@
+- 36 is not supported in fdroid for cargo-apk?
+- update the edition to 2024
