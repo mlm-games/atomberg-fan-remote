@@ -1,0 +1,3 @@
+- pin rust ver
+- More slint ui testing (looks avg...)
+- update to latest ver
