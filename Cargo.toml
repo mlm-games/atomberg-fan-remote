@@ -32,8 +32,8 @@ apk_name = "AtombergRemote"
 label = "Atomberg Remote"
 build_targets = ["aarch64-linux-android"]
 
-[package.metadata.android.application]
-icon = "fastlane/metadata/android/en-US/images/icon.png"
+# [package.metadata.android.application]
+# icon = "fastlane/metadata/android/en-US/images/icon.png"
 
 [package.metadata.android.sdk]
 version_code = 16777486
