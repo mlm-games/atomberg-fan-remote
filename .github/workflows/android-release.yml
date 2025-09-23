@@ -154,18 +154,19 @@ jobs:
         shell: bash
         run: cargo install cargo-apk --locked
 
-      - name: Prepare release keystore for cargo-apk (symmetric ASC or base64 JKS)
+      - name: Prepare release keystore for cargo-apk (single-alias keystore)
         shell: bash
         env:
-          KS_B64: ${{ secrets.ANDROID_KEYSTORE_JKS_B64 }} # optional: base64 keystore
-          KS_ASC: ${{ secrets.ANDROID_KEYSTORE_ASC }} # optional: ASCII-armored keystore
-          KS_PASSPHRASE: ${{ secrets.ANDROID_KEYSTORE_PASSPHRASE }} # required if ASC is symmetric
-          KS_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }} # optional: only if keystore has many entries
-          KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }} # MUST equal key password
+          KS_B64: ${{ secrets.ANDROID_KEYSTORE_JKS_B64 }} # optional (base64 JKS/keystore)
+          KS_ASC: ${{ secrets.ANDROID_KEYSTORE_ASC }} # optional-if-jks-given (ASCII-armored keystore)
+          KS_PASSPHRASE: ${{ secrets.ANDROID_KEYSTORE_PASSPHRASE }} # req. if ASC is symmetric
+          KS_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }} # required if keystore has >1 alias
+          KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }} # store==key password (single)
         run: |
           set -euo pipefail
           cd "$GITHUB_WORKSPACE"
 
+          # 1) Materialize keystore at ./release.keystore
           if [[ -n "${KS_B64:-}" ]]; then
             printf '%s' "$KS_B64" | base64 -d > release.keystore
           elif [[ -n "${KS_ASC:-}" && "${KS_ASC}" == *"BEGIN PGP MESSAGE"* ]]; then
@@ -191,23 +192,33 @@ jobs:
             exit 0
           fi
 
-          # (Optional) If your keystore has multiple entries and you provided KS_ALIAS, reduce it to a single alias.
-          if [[ -n "${KS_ALIAS:-}" ]]; then
-            count=$(keytool -list -keystore release.keystore -storepass "${KS_PASS:-}" 2>/dev/null | grep -c '^Alias name:' || true)
-            if [[ "$count" -gt 1 ]]; then
-              echo "Keystore has $count entries; filtering to alias '$KS_ALIAS'"
-              keytool -importkeystore -noprompt \
-                -srckeystore release.keystore     -srcstorepass "${KS_PASS}" -srcalias "${KS_ALIAS}" \
-                -destkeystore release.single.jks  -deststorepass "${KS_PASS}" -destalias "${KS_ALIAS}" -destkeypass "${KS_PASS}"
-              mv release.single.jks release.keystore
-            fi
-          fi
-
           if [[ -z "${KS_PASS:-}" ]]; then
-            echo "ANDROID_KEYSTORE_PASSWORD must be set (store==key, single password)" >&2; exit 1
+            echo "ANDROID_KEYSTORE_PASSWORD must be set (store==key, single password)" >&2
+            exit 1
           fi
 
-          # Export the two env vars cargo-apk uses
+          # 2) If multiple aliases exist, require ANDROID_KEY_ALIAS and filter to that entry
+          alias_lines=$(keytool -list -v -keystore release.keystore -storepass "$KS_PASS" 2>/dev/null | grep -E '^Alias name:' || true)
+          alias_count=$(printf "%s\n" "$alias_lines" | sed '/^\s*$/d' | wc -l | tr -d ' ')
+          if [[ "$alias_count" == "" ]]; then
+            echo "Failed to read keystore aliases (bad password or corrupt keystore?)" >&2
+            exit 1
+          fi
+          if [[ "$alias_count" -gt 1 ]]; then
+            if [[ -z "${KS_ALIAS:-}" ]]; then
+              echo "The keystore contains multiple aliases; set ANDROID_KEY_ALIAS to one of the following:" >&2
+              echo "$alias_lines" | sed 's/^Alias name: *//'
+              exit 1
+            fi
+            echo "Keystore has $alias_count entries; keeping alias '$KS_ALIAS'"
+            keytool -importkeystore -noprompt \
+              -srckeystore  release.keystore     -srcstorepass  "$KS_PASS" -srcalias  "$KS_ALIAS" \
+              -destkeystore release.single.jks   -deststorepass "$KS_PASS" -destalias "$KS_ALIAS" -destkeypass "$KS_PASS" \
+              -deststoretype JKS
+            mv release.single.jks release.keystore
+          fi
+
+          # 3) Export env for cargo-apk (it will sign during build)
           echo "CARGO_APK_RELEASE_KEYSTORE=$PWD/release.keystore" >> "$GITHUB_ENV"
           echo "CARGO_APK_RELEASE_KEYSTORE_PASSWORD=$KS_PASS"      >> "$GITHUB_ENV"
 
