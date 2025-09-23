@@ -1,0 +1,13 @@
+- try fix yml
+- try fix yml
+- update lock file
+- yml fix
+- update ymls
+- cargo lock file
+- add rlib for future
+- fix ymls
+- Update android-release.yml
+- fix workflow
+- add release yml
+- Add other buttons and a slightly worse ui
+- first commit
