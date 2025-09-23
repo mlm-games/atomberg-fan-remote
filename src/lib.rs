@@ -289,7 +289,7 @@ fn transmit_pattern(env: &mut JNIEnv, pattern: &[i32]) -> jni::errors::Result<()
 }
 
 #[cfg(target_os = "android")]
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub fn android_main(app: slint::android::AndroidApp) {
     android_logger::init_once(
         android_logger::Config::default()
