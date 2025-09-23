@@ -30,8 +30,8 @@ env:
   ANDROID_BUILD_TOOLS: "35.0.0"
   ANDROID_NDK_VERSION: "27.0.12077973"
 
-  # Rust toolchain and Android targets
-  RUST_TOOLCHAIN: "stable"
+  # Rust toolchain
+  RUST_TOOLCHAIN: "1.90.0"
   ANDROID_TARGETS: "aarch64-linux-android armv7-linux-androideabi x86_64-linux-android i686-linux-android"
 
 jobs:
@@ -251,6 +251,8 @@ jobs:
               *) echo "$1" ;;
             esac
           }
+
+          # export CARGO_ENCODED_RUSTFLAGS='--remap-path-prefix=/home/runner=/home/runner'
 
           for triple in ${{ env.ANDROID_TARGETS }}; do
             echo "Building for $triple"
