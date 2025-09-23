@@ -147,7 +147,6 @@ jobs:
       - name: Install Android platforms and NDK
         shell: bash
         run: |
-          yes | sdkmanager --licenses >/dev/null
           sdkmanager "platform-tools" \
                      "platforms;android-${{ env.ANDROID_API }}" \
                      "build-tools;${{ env.ANDROID_BUILD_TOOLS }}" \
