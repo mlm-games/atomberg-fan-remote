@@ -290,6 +290,9 @@ dependencies = [
  "jni",
  "log",
  "ndk-context",
+ "once_cell",
+ "serde",
+ "serde_json",
  "slint",
  "slint-build",
 ]
