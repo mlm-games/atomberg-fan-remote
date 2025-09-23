@@ -1,0 +1,233 @@
+name: Android App Releases
+
+on:
+  schedule:
+    - cron: '0 0 1 */2 *'
+  workflow_dispatch:
+    inputs:
+      upload_releases:
+        description: 'Upload releases (create GitHub Release with APKs)'
+        required: true
+        default: 'true'
+        type: boolean
+      mark_prerelease:
+        description: 'Mark as prerelease'
+        required: true
+        default: 'false'
+        type: boolean
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  APP_NAME: 'Atomberg Remote'
+  APP_SLUG: 'atomberg-remote'
+  APPLICATION_ID: 'dev.mlm.atombergremote'
+
+  # Android SDK/NDK
+  ANDROID_API: '36'
+  ANDROID_BUILD_TOOLS: '36.0.0'
+  ANDROID_NDK_VERSION: '27.0.12077973'
+
+  # Rust toolchain and Android targets
+  RUST_TOOLCHAIN: 'stable'
+  ANDROID_TARGETS: 'aarch64-linux-android armv7-linux-androideabi x86_64-linux-android i686-linux-android'
+
+jobs:
+  prepare-version:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      version_name: ${{ steps.bump.outputs.version_name }}
+      version_code: ${{ steps.bump.outputs.version_code }}
+      commit_sha: ${{ steps.commit.outputs.commit_sha }}
+      release_notes: ${{ steps.notes.outputs.release-notes }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Bump Cargo version (patch) and Android versionCode
+        id: bump
+        shell: bash
+        run: |
+          set -euo pipefail
+          CARGO_TOML="Cargo.toml"
+
+          OLD_VERSION=$(grep -m1 '^version\s*=\s*"' "$CARGO_TOML" | sed -E 's/.*"([^"]+)".*/\1/')
+          if [[ -z "$OLD_VERSION" ]]; then
+            echo "Could not detect package.version in Cargo.toml" >&2
+            exit 1
+          fi
+
+          IFS='.' read -r MAJ MIN PAT <<<"$OLD_VERSION"; : "${MAJ:=0}" "${MIN:=0}" "${PAT:=0}"
+          NEW_VERSION="$MAJ.$MIN.$((PAT+1))"
+          sed -i -E "0,/^version\s*=.*/s//version = \"$NEW_VERSION\"/" "$CARGO_TOML"
+
+          # ensure [package.metadata.android.sdk] exists and bump/add version_code
+          if grep -q '^\[package.metadata.android.sdk\]' "$CARGO_TOML"; then
+            if grep -q '^version_code\s*=' "$CARGO_TOML"; then
+              OLD_CODE=$(grep -m1 '^version_code\s*=' "$CARGO_TOML" | sed -E 's/[^0-9]*([0-9]+).*/\1/')
+              NEW_CODE=$((OLD_CODE+10))
+              sed -i -E "0,/^version_code\s*=.*/s//version_code = $NEW_CODE/" "$CARGO_TOML"
+            else
+              awk 'BEGIN{printed=0} {print} /^\[package.metadata.android.sdk\]$/ && printed==0 {print "version_code = " 100000; printed=1}' "$CARGO_TOML" > Cargo.toml.new && mv Cargo.toml.new "$CARGO_TOML"
+              NEW_CODE=100000
+            fi
+          else
+            {
+              echo ""
+              echo "[package.metadata.android.sdk]"
+              echo "version_code = 100000"
+            } >> "$CARGO_TOML"
+            NEW_CODE=100000
+          fi
+
+          echo "version_name=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+          echo "version_code=$NEW_CODE" >> "$GITHUB_OUTPUT"
+          echo "Bumped version: $OLD_VERSION -> $NEW_VERSION; version_code=$NEW_CODE"
+
+      - name: Generate Release Notes
+        id: notes
+        uses: mlm-games/release-notes-generator@main
+        with:
+          version: ${{ steps.bump.outputs.version_name }}
+          changelog-path: 'CHANGELOG.md'
+          version-file-path: './fastlane/metadata/android/en-US/changelogs/${{ steps.bump.outputs.version_code }}.txt'
+          version-code: '${{ steps.bump.outputs.version_code }}'
+          format: '- {{subject}}'
+          exclude-patterns: 'chore:,ci:,docs:,build:,Bump version,Merge pull request,[skip ci]'
+          auto-commit: 'false'
+
+      - name: Commit changes
+        id: commit
+        shell: bash
+        run: |
+          set -e
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add Cargo.toml fastlane/metadata/android/en-US/changelogs || true
+          git commit -m "chore: bump to v${{ steps.bump.outputs.version_name }} (code ${{ steps.bump.outputs.version_code }}) [skip ci]" || true
+          git push
+          echo "commit_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+  build-and-release:
+    needs: prepare-version
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare-version.outputs.commit_sha }}
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          targets: ${{ env.ANDROID_TARGETS }}
+
+      - name: Cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
+      - name: Set up Android SDK/NDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android platforms and NDK
+        shell: bash
+        run: |
+          yes | sdkmanager --licenses >/dev/null
+          sdkmanager "platform-tools" \
+                     "platforms;android-${{ env.ANDROID_API }}" \
+                     "build-tools;${{ env.ANDROID_BUILD_TOOLS }}" \
+                     "ndk;${{ env.ANDROID_NDK_VERSION }}"
+
+      - name: Install cargo-apk
+        shell: bash
+        run: cargo install cargo-apk --locked
+
+      - name: Build APKs (all ABIs)
+        id: build_apks
+        shell: bash
+        run: |
+          set -euo pipefail
+          VER="${{ needs.prepare-version.outputs.version_name }}"
+          mkdir -p artifacts
+
+          # Map Rust triples to ABI names
+          abi_of() {
+            case "$1" in
+              aarch64-linux-android) echo "arm64-v8a" ;;
+              armv7-linux-androideabi) echo "armeabi-v7a" ;;
+              x86_64-linux-android) echo "x86_64" ;;
+              i686-linux-android) echo "x86" ;;
+              *) echo "$1" ;;
+            esac
+          }
+
+          for triple in ${{ env.ANDROID_TARGETS }}; do
+            echo "Building for $triple"
+            cargo apk build --release --target "$triple"
+
+            # Prefer per-target output, fallback to generic if needed
+            OUT_DIR="target/$triple/release/apk"
+            [ -d "$OUT_DIR" ] || OUT_DIR="target/release/apk"
+
+            APK_SRC=$(ls -1t "$OUT_DIR"/*.apk | head -n1)
+            ABI=$(abi_of "$triple")
+            DEST="artifacts/${{ env.APP_SLUG }}-${VER}-${ABI}-unsigned.apk"
+            cp "$APK_SRC" "$DEST"
+            echo "Built $DEST"
+          done
+
+      - name: Decode and decrypt keystore (.asc)
+        if: ${{ secrets.ANDROID_KEYSTORE_ASC && secrets.ANDROID_KEYSTORE_PASSPHRASE && secrets.ANDROID_KEY_ALIAS && secrets.ANDROID_KEYSTORE_PASSWORD && secrets.ANDROID_KEY_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "${{ secrets.ANDROID_KEYSTORE_ASC }}" > release.keystore.asc
+          gpg --batch --yes --pinentry-mode loopback --passphrase "${{ secrets.ANDROID_KEYSTORE_PASSPHRASE }}" -o release.keystore -d release.keystore.asc
+          ls -l release.keystore
+
+      - name: Sign all APKs
+        if: ${{ secrets.ANDROID_KEYSTORE_ASC && secrets.ANDROID_KEYSTORE_PASSPHRASE && secrets.ANDROID_KEY_ALIAS && secrets.ANDROID_KEYSTORE_PASSWORD && secrets.ANDROID_KEY_PASSWORD }}
+        shell: bash
+        env:
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          BUILD_TOOLS: ${{ env.ANDROID_BUILD_TOOLS }}
+        run: |
+          set -euo pipefail
+          for apk in artifacts/*-unsigned.apk; do
+            signed="${apk%-unsigned.apk}.apk"
+            "$ANDROID_SDK_ROOT/build-tools/${BUILD_TOOLS}/apksigner" sign \
+              --ks release.keystore \
+              --ks-key-alias "$KEY_ALIAS" \
+              --ks-pass pass:"$KS_PASS" \
+              --key-pass pass:"$KEY_PASS" \
+              --out "$signed" \
+              "$apk"
+            "$ANDROID_SDK_ROOT/build-tools/${BUILD_TOOLS}/apksigner" verify "$signed"
+          done
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-${{ needs.prepare-version.outputs.version_name }}
+          path: artifacts/*
+
+      - name: Create GitHub Release with APKs
+        if: ${{ inputs.upload_releases == true }}
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/*
+          name: ${{ env.APP_NAME }} ${{ needs.prepare-version.outputs.version_name }}
+          tag_name: v${{ needs.prepare-version.outputs.version_name }}
+          target_commitish: ${{ needs.prepare-version.outputs.commit_sha }}
+          prerelease: ${{ inputs.mark_prerelease }}
+          body: ${{ needs.prepare-version.outputs.release_notes }}
