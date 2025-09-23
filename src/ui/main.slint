@@ -1,10 +1,166 @@
-// src/ui/main.slint
-import { Button, Palette } from "std-widgets.slint";
+import { Button, Palette, ScrollView } from "std-widgets.slint";
+
+component RippleButton inherits Rectangle {
+    in-out property <string> text: "Button";
+    in-out property <image> icon;
+    in-out property <color> primary-color: Palette.accent-background;
+    in-out property <bool> enabled: true;
+    callback clicked();
+
+    private property <bool> pressed: touch.pressed;
+    private property <float> ripple-progress: 0;
+    min-height: 48px;
+    border-radius: 24px;
+    background: pressed ? primary-color.darker(10%) : primary-color;
+    drop-shadow-blur: pressed ? 2px : 4px;
+    drop-shadow-offset-y: pressed ? 1px : 2px;
+    drop-shadow-color: #00000033;
+    animate background {
+        duration: 200ms;
+        easing: ease-out;
+    }
+    animate drop-shadow-blur, drop-shadow-offset-y {
+        duration: 150ms;
+        easing: ease-in-out;
+    }
+    
+    // Ripple effect
+    if pressed: Rectangle {
+        x: touch.mouse-x - self.width / 2;
+        y: touch.mouse-y - self.height / 2;
+        width: parent.width * 2 * ripple-progress;
+        height: self.width;
+        border-radius: self.width / 2;
+        background: white;
+        opacity: 0.3 * (1 - ripple-progress);
+        clip: true;
+        animate width, height, opacity {
+            duration: 600ms;
+            easing: ease-out;
+        }
+    }
+    HorizontalLayout {
+        padding-top: 10px;
+        padding-bottom: 10px;
+        spacing: 6px;
+        alignment: center;
+        if icon.width * 1px > 0px: Image {
+            source: icon;
+            width: 20px;
+            height: 20px;
+            colorize: white;
+        }
+        Text {
+            text: root.text;
+            color: white;
+            font-size: 13px;
+            font-weight: 600;
+            vertical-alignment: center;
+        }
+    }
+
+    touch := TouchArea {
+        enabled: root.enabled;
+        clicked => {
+            ripple-progress = 0;
+            ripple-progress = 1;
+            root.clicked();
+        }
+    }
+
+    states [
+        disabled when !root.enabled: {
+            background: Palette.control-foreground.with-alpha(0.3);
+        }
+    ]
+}
+
+component SpeedButton inherits Rectangle {
+    in-out property <int> speed: 1;
+    in-out property <bool> selected: false;
+    callback clicked();
+    private property <bool> pressed: touch.pressed;
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    border-width: selected ? 2px : 0;
+    border-color: Palette.accent-background;
+    background: selected ? Palette.accent-background : pressed ? Palette.control-background.darker(10%) : Palette.control-background;
+    animate background, border-width {
+        duration: 200ms;
+        easing: ease-out;
+    }
+    Text {
+        text: root.speed;
+        color: selected ? white : Palette.control-foreground;
+        font-size: 18px;
+        font-weight: selected ? 700 : 400;
+        vertical-alignment: center;
+        horizontal-alignment: center;
+        animate color, font-weight { duration: 200ms; }
+    }
+
+    touch := TouchArea {
+        clicked => {
+            root.clicked();
+        }
+    }
+}
+
+component StatusIndicator inherits Rectangle {
+    in-out property <string> status: "Ready";
+    private property <float> pulse: 0;
+    border-radius: 10px;
+    background: #1e1e1e;
+    min-height: 32px;
+    HorizontalLayout {
+        padding: 8px;
+        spacing: 10px;
+        alignment: start;
+        Rectangle {
+            width: 8px;  
+            
+            // Animated status dot
+            Rectangle {
+                width: 8px;
+                height: 8px;
+                border-radius: 4px;
+                background: @linear-gradient(45deg, #4CAF50, #8BC34A);
+                Rectangle {
+                    width: parent.width;
+                    height: parent.height;
+                    border-radius: parent.border-radius;
+                    background: white;
+                    opacity: pulse;
+                    animate opacity {
+                        duration: 2s;
+                        iteration-count: -1;
+                        easing: ease-in-out;
+                    }
+                }
+            }
+        }
+
+        Text {
+            text: root.status;
+            color: #b0b0b0;
+            font-size: 12px;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+        }
+    }
+
+    init => {
+        pulse = 0.8;
+    }
+}
 
 export component MainWindow inherits Window {
-  // Public API
-  in-out property <string> status: "Ready";
-
+    // Properties
+    in-out property <string> status: "Ready";
+    in-out property <int> current-speed: 0;
+    
+    // Callbacks for all actions  
     callback power();
     callback speed_1();
     callback speed_2();
@@ -12,341 +168,273 @@ export component MainWindow inherits Window {
     callback speed_4();
     callback speed_5();
     callback boost();
-
-    // Extra actions
-  callback sleep();
+    callback sleep();
     callback led();
-    callback timer_1h();
-    callback timer_2h();
-    callback timer_4h();
-
-    // Profile-driven visibility (set from Rust)
-  in-out property <bool> show_sleep: true;
+    callback timer();  // Single timer callback for cycling
+    
+    // Visibility controls
+    in-out property <bool> show_sleep: true;
     in-out property <bool> show_led: false;
-    in-out property <bool> show_timer_1h: true;
-    in-out property <bool> show_timer_2h: true;
-    in-out property <bool> show_timer_4h: true;
-
+    in-out property <bool> show_timer: true;  // Single timer visibility
+    
+    // Theme colors
+    private property <color> bg-primary: #0a0a0a;
+    private property <color> bg-secondary: #141414;
+    private property <color> bg-card: #1a1a1a;
+    private property <color> accent: #2196F3;
+    private property <color> accent-alt: #FF5722;
+    private property <color> text-primary: #ffffff;
+    private property <color> text-secondary: #a0a0a0;
     title: "Atomberg Remote";
     min-width: 320px;
-    min-height: 230px;
-
-    // Simple breakpoints
-  private property <bool> wide: root.width >= 600px;
-
-    // Colors
-  private property <color> surface: #121212;
-    private property <color> panel: #1b1b1b;
-    private property <color> border: #2a2a2a;
-    private property <color> text: #e6e6e6;
-    private property <color> subtext: #9ea2a8;
-
-    background: surface;
-
+    min-height: 480px;
+    preferred-width: 360px;
+    preferred-height: 580px;
+    background: bg-primary;
     VerticalLayout {
-        padding: 12px;
-        spacing: 10px;
-
-        // Header with inline status
-    HorizontalLayout {
-            spacing: 8px;
-            alignment: space-between;
-
-            Text {
-                text: "Atomberg Remote";
-                color: text;
-                font-size: 18px;
-                font-weight: 700;
-                vertical-alignment: center;
-            }
-
-            Rectangle {
-                border-radius: 8px;
-                background: panel;
+        padding: 0;
+        spacing: 0;
+        
+        // Modern header with gradient
+        Rectangle {
+            height: 90px;
+            background: @linear-gradient(135deg, #1976D2, #2196F3);
+            drop-shadow-blur: 6px;
+            drop-shadow-offset-y: 3px;
+            drop-shadow-color: #00000066;
+            VerticalLayout {
+                padding: 16px;
+                padding-top: 28px;
+                spacing: 6px;
                 HorizontalLayout {
-                    padding-left: 10px;
-                    padding-right: 10px;
-                    spacing: 8px;
-                    alignment: center;
-
-                    Rectangle {
-                        width: 8px;
-                        height: 8px;
-                        border-radius: 4px;
-                        background: Palette.accent-background;
-                    }
-
+                    alignment: space-between;
                     Text {
-                        text: root.status;
-                        color: subtext;
-                        font-size: 12px;
+                        text: "Atomberg Remote";
+                        color: white;
+                        font-size: 20px;
+                        font-weight: 700;
                         vertical-alignment: center;
                     }
+                    
+                    // Settings button placeholder
+                    Rectangle {
+                        width: 36px;
+                        height: 36px;
+                        border-radius: 18px;
+                        // background: white.with-alpha(0.2);
+                        Text {
+                            text: " "; // text: "⚙";
+                            color: white;
+                            font-size: 18px;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+
+                        TouchArea {
+                            //TODO: Future: settings menu
+                        }
+                    }
                 }
+
+                // StatusIndicator {
+                //     status: root.status;
+                // }
             }
         }
-
-        Rectangle {
-            height: 1px;
-            background: border;
-        }
-
-        // Centered control panel
-    HorizontalLayout {
-            alignment: center;
-
-            Rectangle {
-                width: min(parent.width, wide ? 640px : 560px);
-                border-radius: 12px;
-                background: panel;
-                drop-shadow-blur: 6px;
-                drop-shadow-color: #00000066;
-
-                VerticalLayout {
-                    padding: 12px;
-                    spacing: 12px;
-
-                    // Power + Boost
-          HorizontalLayout {
-                        spacing: 8px;
-
-                        Button {
-                            text: "⏻ Power";
-                            height: 52px;
-                            preferred-width: 0px;
-                            horizontal-stretch: 1;
-                            clicked => {
-                                root.status = "Power toggled";
-                                root.power();
-                            }
+        
+        // Main content area with scroll
+        ScrollView {
+            VerticalLayout {
+                padding: 14px;
+                spacing: 16px;
+                
+                // Power Control Card
+                Rectangle {
+                    border-radius: 14px;
+                    background: bg-card;
+                    drop-shadow-blur: 3px;
+                    drop-shadow-color: #00000022;
+                    VerticalLayout {
+                        padding: 14px;
+                        spacing: 12px;
+                        Text {
+                            text: "Power Control";
+                            color: text-primary;
+                            font-size: 15px;
+                            font-weight: 600;
                         }
 
-                        Button {
-                            text: "⚡ Boost";
-                            height: 52px;
-                            preferred-width: 0px;
-                            horizontal-stretch: 1;
-                            clicked => {
-                                root.status = "Boost mode";
-                                root.boost();
-                            }
-                        }
-                    }
-
-                    Rectangle {
-                        height: 1px;
-                        background: border;
-                    }
-
-                    // Speeds
-          if wide: HorizontalLayout {
-                        spacing: 8px;
-                        Button {
-                            text: "1";
-                            height: 48px;
-                            preferred-width: 0px;
-                            horizontal-stretch: 1;
-                            clicked => {
-                                root.status = "Speed 1";
-                                root.speed_1();
-                            }
-                        }
-
-                        Button {
-                            text: "2";
-                            height: 48px;
-                            preferred-width: 0px;
-                            horizontal-stretch: 1;
-                            clicked => {
-                                root.status = "Speed 2";
-                                root.speed_2();
-                            }
-                        }
-
-                        Button {
-                            text: "3";
-                            height: 48px;
-                            preferred-width: 0px;
-                            horizontal-stretch: 1;
-                            clicked => {
-                                root.status = "Speed 3";
-                                root.speed_3();
-                            }
-                        }
-
-                        Button {
-                            text: "4";
-                            height: 48px;
-                            preferred-width: 0px;
-                            horizontal-stretch: 1;
-                            clicked => {
-                                root.status = "Speed 4";
-                                root.speed_4();
-                            }
-                        }
-
-                        Button {
-                            text: "5";
-                            height: 48px;
-                            preferred-width: 0px;
-                            horizontal-stretch: 1;
-                            clicked => {
-                                root.status = "Speed 5";
-                                root.speed_5();
-                            }
-                        }
-                    }
-
-                    if !wide: VerticalLayout {
-                        spacing: 8px;
                         HorizontalLayout {
-                            spacing: 8px;
-                            Button {
-                                text: "1";
-                                height: 48px;
-                                preferred-width: 0px;
+                            spacing: 10px;
+                            RippleButton {
+                                text: "Power";
+                                primary-color: accent;
                                 horizontal-stretch: 1;
                                 clicked => {
+                                    root.status = "Power toggled";
+                                    root.power();
+                                }
+                            }
+
+                            RippleButton {
+                                text: "Boost";
+                                primary-color: accent-alt;
+                                horizontal-stretch: 1;
+                                clicked => {
+                                    root.current-speed = 0;
+                                    root.status = "Boost mode";
+                                    root.boost();
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                // Speed Control Card
+                Rectangle {
+                    border-radius: 14px;
+                    background: bg-card;
+                    drop-shadow-blur: 3px;
+                    drop-shadow-color: #00000022;
+                    VerticalLayout {
+                        padding: 14px;
+                        spacing: 12px;
+                        Text {
+                            text: "Fan Speed";
+                            color: text-primary;
+                            font-size: 15px;
+                            font-weight: 600;
+                        }
+
+                        HorizontalLayout {
+                            spacing: 8px;
+                            alignment: center;  // Center the buttons
+                            
+                            SpeedButton {
+                                speed: 1;
+                                selected: root.current-speed == 1;
+                                clicked => {
+                                    root.current-speed = 1;
                                     root.status = "Speed 1";
                                     root.speed_1();
                                 }
                             }
 
-                            Button {
-                                text: "2";
-                                height: 48px;
-                                preferred-width: 0px;
-                                horizontal-stretch: 1;
+                            SpeedButton {
+                                speed: 2;
+                                selected: root.current-speed == 2;
                                 clicked => {
+                                    root.current-speed = 2;
                                     root.status = "Speed 2";
                                     root.speed_2();
                                 }
                             }
 
-                            Button {
-                                text: "3";
-                                height: 48px;
-                                preferred-width: 0px;
-                                horizontal-stretch: 1;
+                            SpeedButton {
+                                speed: 3;
+                                selected: root.current-speed == 3;
                                 clicked => {
+                                    root.current-speed = 3;
                                     root.status = "Speed 3";
                                     root.speed_3();
                                 }
                             }
-                        }
 
-                        HorizontalLayout {
-                            spacing: 8px;
-                            Button {
-                                text: "4";
-                                height: 48px;
-                                preferred-width: 0px;
-                                horizontal-stretch: 1;
+                            SpeedButton {
+                                speed: 4;
+                                selected: root.current-speed == 4;
                                 clicked => {
+                                    root.current-speed = 4;
                                     root.status = "Speed 4";
                                     root.speed_4();
                                 }
                             }
 
-                            Button {
-                                text: "5";
-                                height: 48px;
-                                preferred-width: 0px;
-                                horizontal-stretch: 1;
+                            SpeedButton {
+                                speed: 5;
+                                selected: root.current-speed == 5;
                                 clicked => {
+                                    root.current-speed = 5;
                                     root.status = "Speed 5";
                                     root.speed_5();
                                 }
                             }
-
-                            Rectangle {
-                                preferred-width: 0px;
-                                horizontal-stretch: 1;
-                                background: Colors.transparent;
-                            }
                         }
                     }
-
-                    Rectangle {
-                        height: 1px;
-                        background: border;
-                    }
-
-                    // Extras: Sleep / LED / Timers (conditionally shown)
-          VerticalLayout {
-                        spacing: 8px;
-
-                        // Row A: Sleep / LED / Timer 1h
-            HorizontalLayout {
-                            spacing: 8px;
-                            if show_sleep: Button {
-                                text: "Sleep";
-                                height: 48px;
-                                preferred-width: 0px;
+                }
+                
+                // Additional Controls Card
+                if show_sleep || show_timer || show_led: Rectangle {
+                    border-radius: 14px;
+                    background: bg-card;
+                    drop-shadow-blur: 3px;
+                    drop-shadow-color: #00000022;
+                    VerticalLayout {
+                        padding: 14px;
+                        spacing: 12px;
+                        Text {
+                            text: "Additional Controls";
+                            color: text-primary;
+                            font-size: 15px;
+                            font-weight: 600;
+                        }
+                        
+                        // Control buttons
+                        HorizontalLayout {
+                            spacing: 10px;
+                            if show_sleep: RippleButton {
+                                text: "💤 Sleep";
+                                primary-color: #9C27B0;
                                 horizontal-stretch: 1;
                                 clicked => {
+                                    root.status = "Sleep mode";
                                     root.sleep();
                                 }
                             }
-                            if show_led: Button {
-                                text: "LED";
-                                height: 48px;
-                                preferred-width: 0px;
+                            if show_timer: RippleButton {
+                                text: "⏱️ Timer";
+                                primary-color: #4CAF50;
                                 horizontal-stretch: 1;
                                 clicked => {
+                                    root.status = "Timer cycle";
+                                    root.timer();
+                                }
+                            }
+                            if show_led: RippleButton {
+                                text: "💡 LED";
+                                primary-color: #FFC107;
+                                horizontal-stretch: 1;
+                                clicked => {
+                                    root.status = "LED toggled";
                                     root.led();
                                 }
-                            }
-                            if show_timer_1h: Button {
-                                text: "Timer 1h";
-                                height: 48px;
-                                preferred-width: 0px;
-                                horizontal-stretch: 1;
-                                clicked => {
-                                    root.timer_1h();
-                                }
-                            }
-                        }
-
-                        // Row B: Timer 2h / Timer 4h (spacer if one missing)
-            HorizontalLayout {
-                            spacing: 8px;
-                            if show_timer_2h: Button {
-                                text: "Timer 2h";
-                                height: 48px;
-                                preferred-width: 0px;
-                                horizontal-stretch: 1;
-                                clicked => {
-                                    root.timer_2h();
-                                }
-                            }
-                            if show_timer_4h: Button {
-                                text: "Timer 4h";
-                                height: 48px;
-                                preferred-width: 0px;
-                                horizontal-stretch: 1;
-                                clicked => {
-                                    root.timer_4h();
-                                }
-                            }
-                            Rectangle {
-                                preferred-width: 0px;
-                                horizontal-stretch: 1;
-                                background: Colors.transparent;
                             }
                         }
                     }
                 }
-            }
-        }
+                
+                // Info card
+                Rectangle {
+                    border-radius: 14px;
+                    background: @linear-gradient(135deg, #1a1a1a, #2a2a2a);
+                    VerticalLayout {
+                        padding: 14px;
+                        spacing: 4px;
+                        Text {
+                            text: "ℹ️ Some useful info";
+                            color: text-primary;
+                            font-size: 13px;
+                            font-weight: 600;
+                        }
 
-        // Footer
-    HorizontalLayout {
-            alignment: center;
-            Text {
-                text: "Actions are stateless; fan decides final state.";
-                color: subtext;
-                font-size: 12px;
+                        Text {
+                            text: "• Commands are infrared-based\n• Fan manages final state\n• Timer cycles through 1h/2h/4h/8h\n• Works with Atomberg BLDC fans";
+                            color: text-secondary;
+                            font-size: 11px;
+                            wrap: word-wrap;
+                        }
+                    }
+                }
             }
         }
     }
