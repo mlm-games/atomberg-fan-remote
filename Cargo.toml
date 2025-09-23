@@ -38,7 +38,7 @@ build_targets = ["aarch64-linux-android"]
 [package.metadata.android.sdk]
 version_code = 16777487
 min_sdk_version = 26
-target_sdk_version = 36
+target_sdk_version = 35
 
 [[package.metadata.android.uses_feature]]
 name = "android.hardware.consumerir"
