@@ -283,7 +283,7 @@ dependencies = [
 
 [[package]]
 name = "atomberg-remote"
-version = "0.1.14"
+version = "0.1.15"
 dependencies = [
  "android_logger",
  "jni",
