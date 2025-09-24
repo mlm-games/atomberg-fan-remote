@@ -1,6 +1,6 @@
 [package]
 name = "atomberg-remote"
-version = "0.1.16"
+version = "0.1.17"
 edition = "2024"
 build = "build.rs"
 rust-version = "1.90.0"
@@ -36,7 +36,7 @@ build_targets = ["aarch64-linux-android"]
 # icon = "fastlane/metadata/android/en-US/images/icon.png"
 
 [package.metadata.android.sdk]
-version_code = 16777488
+version_code = 16777489
 min_sdk_version = 26
 target_sdk_version = 35
 
