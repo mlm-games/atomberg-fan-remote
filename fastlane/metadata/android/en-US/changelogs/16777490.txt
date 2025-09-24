@@ -1,0 +1,6 @@
+- Update android-release.yml to only build arm64
+- set api target 35
+- oops missed rm icon code
+- pin rust ver
+- More slint ui testing (looks avg...)
+- update to latest ver
