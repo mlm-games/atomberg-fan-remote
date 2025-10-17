@@ -1,76 +1,136 @@
 import { Button, Palette, ScrollView } from "std-widgets.slint";
 
+export global MaterialTokens {
+    in-out property <color> primary: #2962FF;
+    in-out property <color> on-primary: white;
+
+    in-out property <color> surface: #121212;
+    in-out property <color> on-surface: #E6E6E6;
+
+    in-out property <color> surface-container: #1A1A1A;
+    in-out property <color> surface-container-high: #232323;
+
+    in-out property <color> outline: #3D3D3D;
+    in-out property <color> error: #B3261E;
+    in-out property <color> on-error: white;
+
+    // Behavior flags
+    in-out property <bool> reduce-motion: false;
+}
+
+// Material state-layer alpha helpers
+export component StateAlphas {
+    out property <float> pressed: 0.12;
+    out property <float> focused: 0.12;
+    out property <float> hovered: 0.08;
+    out property <float> disabled: 0.38;
+}
+
 component RippleButton inherits Rectangle {
     in-out property <string> text: "Button";
     in-out property <image> icon;
-    in-out property <color> primary-color: Palette.accent-background;
     in-out property <bool> enabled: true;
+    in-out property <color> container: MaterialTokens.primary;
+    in-out property <color> on-container: MaterialTokens.on-primary;
+    in-out property <bool> reduce-motion: MaterialTokens.reduce-motion;
     callback clicked();
 
     private property <bool> pressed: touch.pressed;
-    private property <float> ripple-progress: 0;
+    private property <bool> ripple-active: false;
+    private property <float> ripple-t: 0;
+    private property <length> radius: 12px;
+
     min-height: 48px;
-    border-radius: 24px;
-    background: pressed ? primary-color.darker(10%) : primary-color;
-    drop-shadow-blur: pressed ? 2px : 4px;
+    border-radius: radius;
+    background: container;
+    clip: true;
+
+    // elevation
+    drop-shadow-blur: pressed ? 2px : 3px;
     drop-shadow-offset-y: pressed ? 1px : 2px;
     drop-shadow-color: #00000033;
-    animate background {
-        duration: 200ms;
+
+    // Animations respect reduce-motion
+    animate drop-shadow-blur, drop-shadow-offset-y {
+        duration: reduce-motion ? 0ms : 150ms;
         easing: ease-out;
     }
-    animate drop-shadow-blur, drop-shadow-offset-y {
-        duration: 150ms;
-        easing: ease-in-out;
+    animate ripple-t {
+        duration: reduce-motion ? 0ms : 500ms;
+        easing: ease-out;
     }
-    
-    // Ripple effect
-    if pressed: Rectangle {
-        x: touch.mouse-x - self.width / 2;
-        y: touch.mouse-y - self.height / 2;
-        width: parent.width * 2 * ripple-progress;
-        height: self.width;
-        border-radius: self.width / 2;
-        background: white;
-        opacity: 0.3 * (1 - ripple-progress);
-        clip: true;
-        animate width, height, opacity {
-            duration: 600ms;
-            easing: ease-out;
-        }
+    animate opacity {
+        duration: reduce-motion ? 0ms : 120ms;
+        easing: ease-out;
     }
+
+    // Content
     HorizontalLayout {
         padding-top: 10px;
         padding-bottom: 10px;
-        spacing: 6px;
+        padding-left: 12px;
+        padding-right: 12px;
+        spacing: 8px;
         alignment: center;
+
         if icon.width * 1px > 0px: Image {
             source: icon;
             width: 20px;
             height: 20px;
-            colorize: white;
+            colorize: on-container;
         }
         Text {
             text: root.text;
-            color: white;
-            font-size: 13px;
+            color: on-container;
+            font-size: 14px;
             font-weight: 600;
             vertical-alignment: center;
         }
     }
 
+    Rectangle {
+        // sits above content
+        background: on-container;
+        opacity: pressed ? 0.12 : 0;
+    }
+
+    // as state-layer FIXME
+    // Bounded ripple (centered on touch)
+    if ripple-active: Rectangle {
+        x: touch.mouse-x - self.width / 2;
+        y: touch.mouse-y - self.height / 2;
+        width: max(parent.width, parent.height) * 2 * ripple-t;
+        height: self.width;
+        border-radius: self.width / 2;
+        background: on-container.with-alpha(0.16);
+        opacity: (1.0 - ripple-t);
+    }
+
     touch := TouchArea {
         enabled: root.enabled;
         clicked => {
-            ripple-progress = 0;
-            ripple-progress = 1;
             root.clicked();
+        }
+        pointer-event(event) => {
+            if (event.kind == PointerEventKind.down) {
+                ripple-active = true;
+                ripple-t = 0;
+                ripple-t = 1;
+            }
         }
     }
 
+    // Focus ring (keyboard/TV)
+    // border-width: focus-area.has-focus ? 2px : 0px;
+    border-color: on-container.with-alpha(0.32);
+    FocusScope {
+        // grab focus via d-pad/keyboard? probably wouldn't have ir emitters
+    }
+
+    // as focus-area
     states [
         disabled when !root.enabled: {
-            background: Palette.control-foreground.with-alpha(0.3);
+            background: container.with-alpha(0.12);
         }
     ]
 }
@@ -78,26 +138,42 @@ component RippleButton inherits Rectangle {
 component SpeedButton inherits Rectangle {
     in-out property <int> speed: 1;
     in-out property <bool> selected: false;
+    in-out property <bool> reduce-motion: MaterialTokens.reduce-motion;
     callback clicked();
+
     private property <bool> pressed: touch.pressed;
+
     width: 48px;
     height: 48px;
     border-radius: 12px;
-    border-width: selected ? 2px : 0;
-    border-color: Palette.accent-background;
-    background: selected ? Palette.accent-background : pressed ? Palette.control-background.darker(10%) : Palette.control-background;
-    animate background, border-width {
-        duration: 200ms;
+    background: selected ? MaterialTokens.primary : MaterialTokens.surface-container-high;
+    border-width: selected ? 0px : 1px;
+    border-color: MaterialTokens.outline;
+
+    drop-shadow-blur: selected ? 3px : 0px;
+    drop-shadow-offset-y: selected ? 2px : 0px;
+    drop-shadow-color: selected ? #00000033 : transparent;
+
+    animate drop-shadow-blur, drop-shadow-offset-y {
+        duration: reduce-motion ? 0ms : 150ms;
         easing: ease-out;
     }
+
+    // Label
     Text {
         text: root.speed;
-        color: selected ? white : Palette.control-foreground;
-        font-size: 18px;
-        font-weight: selected ? 700 : 400;
+        color: selected ? MaterialTokens.on-primary : MaterialTokens.on-surface;
+        font-size: 16px;
+        font-weight: selected ? 700 : 500;
         vertical-alignment: center;
         horizontal-alignment: center;
-        animate color, font-weight { duration: 200ms; }
+    }
+
+    // State layer
+    Rectangle {
+        background: (selected ? MaterialTokens.on-primary : MaterialTokens.on-surface);
+        opacity: pressed ? 0.12 : 0;
+        animate opacity { duration: reduce-motion ? 0ms : 120ms; }
     }
 
     touch := TouchArea {
@@ -109,58 +185,62 @@ component SpeedButton inherits Rectangle {
 
 component StatusIndicator inherits Rectangle {
     in-out property <string> status: "Ready";
-    private property <float> pulse: 0;
+    in-out property <bool> reduce-motion: MaterialTokens.reduce-motion;
+
     border-radius: 10px;
-    background: #1e1e1e;
+    background: MaterialTokens.surface-container;
     min-height: 32px;
+
     HorizontalLayout {
         padding: 8px;
         spacing: 10px;
         alignment: start;
+
+        // semantic dot (success by default)
         Rectangle {
-            width: 8px;  
-            
-            // Animated status dot
+            width: 8px;
+            height: 8px;
+            border-radius: 4px;
+            background: @linear-gradient(45deg, #4CAF50, #8BC34A);
             Rectangle {
-                width: 8px;
-                height: 8px;
-                border-radius: 4px;
-                background: @linear-gradient(45deg, #4CAF50, #8BC34A);
-                Rectangle {
-                    width: parent.width;
-                    height: parent.height;
-                    border-radius: parent.border-radius;
-                    background: white;
-                    opacity: pulse;
-                    animate opacity {
-                        duration: 2s;
-                        iteration-count: -1;
-                        easing: ease-in-out;
-                    }
+                width: parent.width;
+                height: parent.height;
+                border-radius: parent.border-radius;
+                background: white;
+                opacity: reduce-motion ? 0 : 0.6;
+                animate opacity {
+                    duration: reduce-motion ? 0ms : 2000ms;
+                    iteration-count: reduce-motion ? 1 : -1;
+                    easing: ease-in-out;
                 }
             }
         }
 
         Text {
             text: root.status;
-            color: #b0b0b0;
+            color: MaterialTokens.on-surface.with-alpha(0.8);
             font-size: 12px;
             vertical-alignment: center;
             horizontal-stretch: 1;
         }
     }
-
-    init => {
-        pulse = 0.8;
-    }
 }
 
 export component MainWindow inherits Window {
-    // Properties
+    // Theme (template for injected, if needed for other apps)
+    // Material := MaterialTokens { }
+
+    Alphas := StateAlphas { }
+
+    // Behavior flags
+    in-out property <bool> reduce-motion: false;
+    in-out property <bool> dynamic-colors-enabled: true;
+
+    // App state
     in-out property <string> status: "Ready";
     in-out property <int> current-speed: 0;
-    
-    // Callbacks for all actions  
+
+    // Callbacks
     callback power();
     callback speed_1();
     callback speed_2();
@@ -170,106 +250,80 @@ export component MainWindow inherits Window {
     callback boost();
     callback sleep();
     callback led();
-    callback timer();  // Single timer callback for cycling
-    
-    // Visibility controls
+    callback timer();
+
+    // Visibility
     in-out property <bool> show_sleep: true;
     in-out property <bool> show_led: false;
-    in-out property <bool> show_timer: true;  // Single timer visibility
-    
-    // Theme colors
-    private property <color> bg-primary: #0a0a0a;
-    private property <color> bg-secondary: #141414;
-    private property <color> bg-card: #1a1a1a;
-    private property <color> accent: #2196F3;
-    private property <color> accent-alt: #FF5722;
-    private property <color> text-primary: #ffffff;
-    private property <color> text-secondary: #a0a0a0;
+    in-out property <bool> show_timer: true;
+
+    // Layout + safe area
+    in-out property <int> safe-bottom: 16; // supply device gesture inset if available
     title: "Atomberg Remote";
     min-width: 320px;
     min-height: 480px;
     preferred-width: 360px;
-    preferred-height: 580px;
-    background: bg-primary;
+    preferred-height: 600px;
+    background: MaterialTokens.surface;
+
+    // Wire behavior flags into theme
+    init => {
+        MaterialTokens.reduce-motion = root.reduce-motion;
+    }
+
     VerticalLayout {
         padding: 0;
         spacing: 0;
-        
-        // Modern header with gradient
+
+        // Flat app bar
         Rectangle {
-            height: 90px;
-            background: @linear-gradient(135deg, #1976D2, #2196F3);
-            drop-shadow-blur: 6px;
-            drop-shadow-offset-y: 3px;
-            drop-shadow-color: #00000066;
+            height: 64px;
+            background: MaterialTokens.surface-container-high;
             VerticalLayout {
-                padding: 16px;
-                padding-top: 28px;
-                spacing: 6px;
-                HorizontalLayout {
-                    alignment: space-between;
-                    Text {
-                        text: "Atomberg Remote";
-                        color: white;
-                        font-size: 20px;
-                        font-weight: 700;
-                        vertical-alignment: center;
-                    }
-                    
-                    // Settings button placeholder
-                    Rectangle {
-                        width: 36px;
-                        height: 36px;
-                        border-radius: 18px;
-                        // background: white.with-alpha(0.2);
-                        Text {
-                            text: " "; // text: "⚙";
-                            color: white;
-                            font-size: 18px;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                        }
-
-                        TouchArea {
-                            //TODO: Future: settings menu
-                        }
-                    }
+                padding-left: 16px;
+                padding-right: 16px;
+                padding-top: 16px;
+                padding-bottom: 12px;
+                Text {
+                    text: "Atomberg Remote";
+                    color: MaterialTokens.on-surface;
+                    font-size: 20px;
+                    font-weight: 700;
+                    vertical-alignment: center;
                 }
-
-                // StatusIndicator {
-                //     status: root.status;
-                // }
             }
         }
-        
-        // Main content area with scroll
+
+        // Content
         ScrollView {
             VerticalLayout {
-                padding: 14px;
+                padding: 16px;
                 spacing: 16px;
-                
-                // Power Control Card
+
+                // Power card
                 Rectangle {
-                    border-radius: 14px;
-                    background: bg-card;
-                    drop-shadow-blur: 3px;
-                    drop-shadow-color: #00000022;
+                    border-radius: 12px;
+                    background: MaterialTokens.surface-container;
+                    border-width: 1px;
+                    border-color: MaterialTokens.outline;
                     VerticalLayout {
                         padding: 14px;
                         spacing: 12px;
                         Text {
                             text: "Power Control";
-                            color: text-primary;
-                            font-size: 15px;
+                            color: MaterialTokens.on-surface;
+                            font-size: 16px;
                             font-weight: 600;
                         }
 
                         HorizontalLayout {
-                            spacing: 10px;
+                            spacing: 12px;
                             RippleButton {
                                 text: "Power";
-                                primary-color: accent;
+                                container: MaterialTokens.primary;
+                                on-container: MaterialTokens.on-primary;
                                 horizontal-stretch: 1;
+                                reduce-motion: root.reduce-motion;
                                 clicked => {
                                     root.status = "Power toggled";
                                     root.power();
@@ -278,8 +332,10 @@ export component MainWindow inherits Window {
 
                             RippleButton {
                                 text: "Boost";
-                                primary-color: accent-alt;
+                                container: #FF5722;
+                                on-container: white;
                                 horizontal-stretch: 1;
+                                reduce-motion: root.reduce-motion;
                                 clicked => {
                                     root.current-speed = 0;
                                     root.status = "Boost mode";
@@ -289,29 +345,33 @@ export component MainWindow inherits Window {
                         }
                     }
                 }
-                
-                // Speed Control Card
+
+                // Speed grid
                 Rectangle {
-                    border-radius: 14px;
-                    background: bg-card;
-                    drop-shadow-blur: 3px;
-                    drop-shadow-color: #00000022;
+                    border-radius: 12px;
+                    background: MaterialTokens.surface-container;
+                    border-width: 1px;
+                    border-color: MaterialTokens.outline;
+
                     VerticalLayout {
                         padding: 14px;
                         spacing: 12px;
                         Text {
                             text: "Fan Speed";
-                            color: text-primary;
-                            font-size: 15px;
+                            color: MaterialTokens.on-surface;
+                            font-size: 16px;
                             font-weight: 600;
                         }
 
-                        HorizontalLayout {
-                            spacing: 8px;
-                            alignment: center;  // Center the buttons
-                            
+                        GridLayout {
+                            // Doesn't support, Columns scale with width: phones=5 in one row, tablets/foldables wrap
+                            // col: root.width >= 600px ? 3 : 5;
+                            spacing-vertical: 8px;
+                            spacing-horizontal: 8px;
+
                             SpeedButton {
                                 speed: 1;
+                                reduce-motion: root.reduce-motion;
                                 selected: root.current-speed == 1;
                                 clicked => {
                                     root.current-speed = 1;
@@ -322,6 +382,7 @@ export component MainWindow inherits Window {
 
                             SpeedButton {
                                 speed: 2;
+                                reduce-motion: root.reduce-motion;
                                 selected: root.current-speed == 2;
                                 clicked => {
                                     root.current-speed = 2;
@@ -332,6 +393,7 @@ export component MainWindow inherits Window {
 
                             SpeedButton {
                                 speed: 3;
+                                reduce-motion: root.reduce-motion;
                                 selected: root.current-speed == 3;
                                 clicked => {
                                     root.current-speed = 3;
@@ -342,6 +404,7 @@ export component MainWindow inherits Window {
 
                             SpeedButton {
                                 speed: 4;
+                                reduce-motion: root.reduce-motion;
                                 selected: root.current-speed == 4;
                                 clicked => {
                                     root.current-speed = 4;
@@ -352,6 +415,7 @@ export component MainWindow inherits Window {
 
                             SpeedButton {
                                 speed: 5;
+                                reduce-motion: root.reduce-motion;
                                 selected: root.current-speed == 5;
                                 clicked => {
                                     root.current-speed = 5;
@@ -362,48 +426,54 @@ export component MainWindow inherits Window {
                         }
                     }
                 }
-                
-                // Additional Controls Card
+
+                // Additional Controls
                 if show_sleep || show_timer || show_led: Rectangle {
-                    border-radius: 14px;
-                    background: bg-card;
-                    drop-shadow-blur: 3px;
-                    drop-shadow-color: #00000022;
+                    border-radius: 12px;
+                    background: MaterialTokens.surface-container;
+                    border-width: 1px;
+                    border-color: MaterialTokens.outline;
+
                     VerticalLayout {
                         padding: 14px;
                         spacing: 12px;
                         Text {
                             text: "Additional Controls";
-                            color: text-primary;
-                            font-size: 15px;
+                            color: MaterialTokens.on-surface;
+                            font-size: 16px;
                             font-weight: 600;
                         }
-                        
-                        // Control buttons
+
                         HorizontalLayout {
-                            spacing: 10px;
+                            spacing: 12px;
                             if show_sleep: RippleButton {
-                                text: "💤 Sleep";
-                                primary-color: #9C27B0;
+                                text: "Sleep";
+                                container: #9C27B0;
+                                on-container: white;
                                 horizontal-stretch: 1;
+                                reduce-motion: root.reduce-motion;
                                 clicked => {
                                     root.status = "Sleep mode";
                                     root.sleep();
                                 }
                             }
                             if show_timer: RippleButton {
-                                text: "⏱️ Timer";
-                                primary-color: #4CAF50;
+                                text: "Timer";
+                                container: #4CAF50;
+                                on-container: white;
                                 horizontal-stretch: 1;
+                                reduce-motion: root.reduce-motion;
                                 clicked => {
                                     root.status = "Timer cycle";
                                     root.timer();
                                 }
                             }
                             if show_led: RippleButton {
-                                text: "💡 LED";
-                                primary-color: #FFC107;
+                                text: "LED";
+                                container: #FFC107;
+                                on-container: #1A1A1A;
                                 horizontal-stretch: 1;
+                                reduce-motion: root.reduce-motion;
                                 clicked => {
                                     root.status = "LED toggled";
                                     root.led();
@@ -412,28 +482,37 @@ export component MainWindow inherits Window {
                         }
                     }
                 }
-                
-                // Info card
+
+                // Info
                 Rectangle {
-                    border-radius: 14px;
-                    background: @linear-gradient(135deg, #1a1a1a, #2a2a2a);
+                    border-radius: 12px;
+                    background: MaterialTokens.surface-container-high;
+                    border-width: 1px;
+                    border-color: MaterialTokens.outline;
+
                     VerticalLayout {
                         padding: 14px;
-                        spacing: 4px;
+                        spacing: 6px;
                         Text {
-                            text: "ℹ️ Some useful info";
-                            color: text-primary;
-                            font-size: 13px;
+                            text: "Info";
+                            color: MaterialTokens.on-surface;
+                            font-size: 14px;
                             font-weight: 600;
                         }
 
                         Text {
-                            text: "• Commands are infrared-based\n• Fan manages final state\n• Timer cycles through 1h/2h/4h/8h\n• Works with Atomberg BLDC fans";
-                            color: text-secondary;
-                            font-size: 11px;
+                            text: "• Commands are infrared-based\n• Fan manages final state\n• Timer cycles 1h / 2h / 4h / 8h\n• Works with Atomberg BLDC fans";
+                            color: MaterialTokens.on-surface.with-alpha(0.75);
+                            font-size: 12px;
                             wrap: word-wrap;
                         }
                     }
+                }
+
+                // Bottom spacer for gesture area
+                Rectangle {
+                    height: safe-bottom * 1px;
+                    background: transparent;
                 }
             }
         }
