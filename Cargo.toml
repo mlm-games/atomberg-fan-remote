@@ -46,3 +46,9 @@ required = true
 
 [[package.metadata.android.uses_permission]]
 name = "android.permission.TRANSMIT_IR"
+
+[profile.release]
+codegen-units = 1
+debug = 0
+strip = "symbols"     # trims .symtab/.strtab; reduces diff surface
+lto = "thin"
