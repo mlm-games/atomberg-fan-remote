@@ -1,0 +1,4 @@
+- [chore] Bump version to 0.2.0
+- Add release profile settings to Cargo.toml
+- Revise README for better organization and details
+- (gen) Enhance README with project details and instructions
