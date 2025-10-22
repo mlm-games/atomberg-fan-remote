@@ -165,7 +165,7 @@ jobs:
 
       - name: Install cargo-apk
         shell: bash
-        run: cargo install cargo-apk --locked
+        run: cargo install --git https://github.com/mlm-games/cargo-apk.git cargo-apk --locked
 
       - name: Prepare release keystore for cargo-apk (single-alias keystore)
         shell: bash
