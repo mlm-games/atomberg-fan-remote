@@ -163,6 +163,17 @@ jobs:
             "build-tools;${{ env.ANDROID_BUILD_TOOLS }}" \
             "ndk;${{ env.ANDROID_NDK_VERSION }}"
 
+
+      - name: Pin NDK version and verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "ANDROID_NDK_ROOT=$ANDROID_HOME/ndk/${{ env.ANDROID_NDK_VERSION }}" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/${{ env.ANDROID_NDK_VERSION }}" >> "$GITHUB_ENV"
+          echo "NDK_HOME=$ANDROID_HOME/ndk/${{ env.ANDROID_NDK_VERSION }}"       >> "$GITHUB_ENV"
+          echo "Using NDK:"; grep '^Pkg.Revision' "$ANDROID_HOME/ndk/${{ env.ANDROID_NDK_VERSION }}/source.properties" || true
+          "$ANDROID_HOME/ndk/${{ env.ANDROID_NDK_VERSION }}/toolchains/llvm/prebuilt/linux-x86_64/bin/clang" --version | head -2
+
       - name: Install cargo-apk
         shell: bash
         run: cargo install --git https://github.com/mlm-games/cargo-apk.git cargo-apk --locked
