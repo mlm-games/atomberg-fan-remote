@@ -1,0 +1,1 @@
+- Change cargo-apk installation to use Git repository
