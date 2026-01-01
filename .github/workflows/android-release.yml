@@ -49,7 +49,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Bump Cargo version (patch) and set cargo-apk versionCode
+      - name: Bump Cargo version (patch) and set cargo-rapk versionCode
         id: bump
         shell: bash
         run: |
@@ -66,7 +66,7 @@ jobs:
           NEW_VERSION="$MAJ.$MIN.$((PAT+1))"
           sed -i -E "0,/^version\s*=.*/s//version = \"$NEW_VERSION\"/" "$CARGO_TOML"
 
-          # 2) compute cargo-apk versionCode from NEW_VERSION
+          # 2) compute cargo-rapk versionCode from NEW_VERSION
           IFS='.' read -r NMAJ NMIN NPAT <<<"$NEW_VERSION"
           APK_ID=1
           VERSION_CODE=$(( (APK_ID<<24) | (NMAJ<<16) | (NMIN<<8) | NPAT ))
@@ -174,11 +174,11 @@ jobs:
           echo "Using NDK:"; grep '^Pkg.Revision' "$ANDROID_HOME/ndk/${{ env.ANDROID_NDK_VERSION }}/source.properties" || true
           "$ANDROID_HOME/ndk/${{ env.ANDROID_NDK_VERSION }}/toolchains/llvm/prebuilt/linux-x86_64/bin/clang" --version | head -2
 
-      - name: Install cargo-apk
+      - name: Install cargo-rapk
         shell: bash
-        run: cargo install --git https://github.com/mlm-games/cargo-apk.git cargo-apk --locked
+        run: cargo install --git https://github.com/mlm-games/cargo-rapk.git cargo-rapk --locked
 
-      - name: Prepare release keystore for cargo-apk (single-alias keystore)
+      - name: Prepare release keystore for cargo-rapk (single-alias keystore)
         shell: bash
         env:
           KS_B64: ${{ secrets.ANDROID_KEYSTORE_JKS_B64 }} # optional (base64 JKS/keystore)
@@ -242,9 +242,9 @@ jobs:
             mv release.single.jks release.keystore
           fi
 
-          # 3) Export env for cargo-apk (it will sign during build)
-          echo "CARGO_APK_RELEASE_KEYSTORE=$PWD/release.keystore" >> "$GITHUB_ENV"
-          echo "CARGO_APK_RELEASE_KEYSTORE_PASSWORD=$KS_PASS"      >> "$GITHUB_ENV"
+          # 3) Export env for cargo-rapk (it will sign during build)
+          echo "CARGO_RAPK_RELEASE_KEYSTORE=$PWD/release.keystore" >> "$GITHUB_ENV"
+          echo "CARGO_RAPK_RELEASE_KEYSTORE_PASSWORD=$KS_PASS"      >> "$GITHUB_ENV"
 
       - name: Stage source into /tmp/build/src
         shell: bash
